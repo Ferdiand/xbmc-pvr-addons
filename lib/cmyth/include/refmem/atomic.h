@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2004-2008, Eric Lund, Jon Gettler
+ *  Copyright (C) 2004-2013, Eric Lund, Jon Gettler
  *  http://www.mvpmc.org/
  *
  *  This library is free software; you can redistribute it and/or
@@ -17,10 +17,16 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
+/** \file atomic.h
+ * Atomic operations for a variety of platforms.  Use of this header file
+ * outside librefmem is \b deprecated.  This file will not be installed in
+ * future releases.
+ */
+
 #ifndef __MVP_ATOMIC_H
 #define __MVP_ATOMIC_H
 
-#ifdef __APPLE__
+#if defined(__GNUC__) && !defined(__clang__) && defined(__APPLE__)
 #pragma GCC optimization_level 0
 #endif
 
@@ -52,7 +58,7 @@ static inline unsigned
 __mvp_atomic_increment(mvp_atomic_t *valp)
 {
 	mvp_atomic_t __val;
-#if defined __i486__ || defined __i586__ || defined __i686__
+#if defined __i486__ || defined __i586__ || defined __i686__ || defined __x86_64__
 	__asm__ __volatile__(
 		"lock xaddl %0, (%1);"
 		"     inc   %0;"
@@ -80,7 +86,7 @@ __mvp_atomic_increment(mvp_atomic_t *valp)
 #elif defined _MSC_VER
 	__val = InterlockedIncrement(valp);
 #elif defined ANDROID
-	__val = __sync_add_and_fetch(valp, 1);
+	__val = __atomic_inc(valp) + 1;
 #elif defined __arm__ && !defined __thumb__
 	int tmp1, tmp2;
 	int inc = 1;
@@ -93,8 +99,8 @@ __mvp_atomic_increment(mvp_atomic_t *valp)
 		"cmp     %0, %2\n"
 		"swpne   %0, %2, [%3]\n"
 		"bne     0b\n"
-		: "=&r"(tmp1), "=&r"(__val), "=&r"(tmp2)
-		: "r" (valp), "r"(inc)
+		: "=&r"(tmp1), "=&r"(__val), "=&r"(tmp2) 
+		: "r" (valp), "r"(inc) 
 		: "cc", "memory");
 #elif defined __mips__
 	__val = atomic_increment_val(valp);
@@ -120,7 +126,7 @@ static inline unsigned
 __mvp_atomic_decrement(mvp_atomic_t *valp)
 {
 	mvp_atomic_t __val;
-#if defined __i486__ || defined __i586__ || defined __i686__
+#if defined __i486__ || defined __i586__ || defined __i686__ || defined __x86_64__
 	__asm__ __volatile__(
 		"lock xaddl %0, (%1);"
 		"     dec   %0;"
@@ -146,7 +152,7 @@ __mvp_atomic_decrement(mvp_atomic_t *valp)
 		      : "r" (valp)
 		      : "cc", "memory");
 #elif defined ANDROID
-	__val = __sync_sub_and_fetch(valp, 1);
+	__val = __atomic_dec(valp) - 1;
 #elif defined __arm__ && !defined __thumb__
 	int tmp1, tmp2;
 	int inc = -1;
@@ -159,8 +165,8 @@ __mvp_atomic_decrement(mvp_atomic_t *valp)
 		"cmp     %0, %2\n"
 		"swpne   %0, %2, [%3]\n"
 		"bne     0b\n"
-		: "=&r"(tmp1), "=&r"(__val), "=&r"(tmp2)
-		: "r" (valp), "r"(inc)
+		: "=&r"(tmp1), "=&r"(__val), "=&r"(tmp2) 
+		: "r" (valp), "r"(inc) 
 		: "cc", "memory");
 #elif defined __mips__
 	__val = atomic_decrement_val(valp);
@@ -217,7 +223,7 @@ static inline int mvp_atomic_val(mvp_atomic_t *a) {
 	return *a;
 };
 
-#ifdef __APPLE__
+#if defined(__GNUC__) && !defined(__clang__) && defined(__APPLE__)
 #pragma GCC optimization_level reset
 #endif
 

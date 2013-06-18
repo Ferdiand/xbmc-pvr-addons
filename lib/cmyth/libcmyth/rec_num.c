@@ -27,8 +27,8 @@
 #include <cmyth_local.h>
 
 /*
- * cmyth_rec_num_destroy()
- *
+ * cmyth_rec_num_destroy(cmyth_rec_num_t rn)
+ * 
  * Scope: PRIVATE (static)
  *
  * Description
@@ -55,8 +55,8 @@ cmyth_rec_num_destroy(cmyth_rec_num_t rn)
 }
 
 /*
- * cmyth_rec_num_create()
- *
+ * cmyth_rec_num_create(void)
+ * 
  * Scope: PUBLIC
  *
  * Description
@@ -87,8 +87,8 @@ cmyth_rec_num_create(void)
 }
 
 /*
- * cmyth_rec_num_hold()
- *
+ * cmyth_rec_num_hold(cmyth_rec_num_t p)
+ * 
  * Scope: PUBLIC
  *
  * Description
@@ -117,8 +117,8 @@ cmyth_rec_num_hold(cmyth_rec_num_t p)
 }
 
 /*
- * cmyth_rec_num_release()
- *
+ * cmyth_rec_num_release(cmyth_rec_num_t p)
+ * 
  * Scope: PUBLIC
  *
  * Description
@@ -142,8 +142,10 @@ cmyth_rec_num_release(cmyth_rec_num_t p)
 }
 
 /*
- * cmyth_rec_num_get()
- *
+ * cmyth_rec_num_get(char *host,
+ *                    unsigned short port,
+ *                    unsigned id)
+ * 
  * Scope: PUBLIC
  *
  * Description
@@ -157,10 +159,10 @@ cmyth_rec_num_release(cmyth_rec_num_t p)
  *
  * Failure: NULL
  */
-cmyth_rec_num_t
+cmyth_rec_num_t 
 cmyth_rec_num_get(char *host,
-		   uint16_t port,
-		   int32_t id)
+		   unsigned short port,
+		   unsigned id)
 {
 	cmyth_rec_num_t ret;
 
@@ -178,8 +180,8 @@ cmyth_rec_num_get(char *host,
 }
 
 /*
- * cmyth_rec_num_string()
- *
+ * cmyth_rec_num_string(cmyth_rec_num_t rn)
+ * 
  * Scope: PUBLIC
  *
  * Description
@@ -207,9 +209,9 @@ cmyth_rec_num_string(cmyth_rec_num_t rn)
 	if (!rn->recnum_host) {
 		return NULL;
 	}
-	sprintf(id, "%"PRId32, rn->recnum_id);
+	sprintf(id, "%d", rn->recnum_id);
 	len += strlen(id);
-	sprintf(port, "%"PRIu16, rn->recnum_port);
+	sprintf(port, "%d", rn->recnum_port);
 	len += strlen(port);
 	len += strlen(rn->recnum_host);
 	ret = malloc((len + 1) * sizeof(char));

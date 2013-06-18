@@ -21,15 +21,15 @@
  * keyframe.c - functions to manage key frame structures.  Mostly
  *              just allocating, freeing, and filling them out.
  */
-#include <sys/types.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <inttypes.h>
 #include <cmyth_local.h>
 
 /*
- * cmyth_keyframe_create()
- *
+ * cmyth_keyframe_create(void)
+ * 
  * Scope: PUBLIC
  *
  * Description
@@ -59,8 +59,40 @@ cmyth_keyframe_create(void)
 }
 
 /*
- * cmyth_keyframe_string()
+ * cmyth_keyframe_fill(cmyth_keyframe_t kf,
+ * 	               unsigned long keynum,
+ *                     unsigned long long pos)
+ * 
+ * Scope: PUBLIC
  *
+ * Description
+ *
+ * Fill out the contents of the recorder number structure 'rn' using
+ * the values 'keynum' and 'pos'.
+ *
+ * Return Value:
+ *
+ * Success: 0
+ *
+ * Failure: -(ERRNO)
+ */
+cmyth_keyframe_t
+cmyth_keyframe_fill(unsigned long keynum, unsigned long long pos)
+{
+	cmyth_keyframe_t ret = cmyth_keyframe_create();
+
+	if (!ret) {
+		return NULL;
+	}
+
+	ret->keyframe_number = keynum;
+	ret->keyframe_pos = pos;
+	return ret;
+}
+
+/*
+ * cmyth_keyframe_string(cmyth_keyframe_t kf)
+ * 
  * Scope: PUBLIC
  *
  * Description
@@ -87,7 +119,7 @@ cmyth_keyframe_string(cmyth_keyframe_t kf)
 	}
 	sprintf(pos, "%"PRId64, kf->keyframe_pos);
 	len += strlen(pos);
-	sprintf(key, "%"PRIu32, kf->keyframe_number);
+	sprintf(key, "%ld", kf->keyframe_number);
 	len += strlen(key);
 	ret = malloc(len * sizeof(char));
 	if (!ret) {

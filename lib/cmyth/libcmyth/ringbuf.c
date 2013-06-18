@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2004-2012, Eric Lund
+ *  Copyright (C) 2004-2013, Eric Lund
  *  http://www.mvpmc.org/
  *
  *  This library is free software; you can redistribute it and/or
@@ -32,8 +32,8 @@
 #include <cmyth_local.h>
 
 /*
- * cmyth_ringbuf_destroy()
- *
+ * cmyth_ringbuf_destroy(cmyth_ringbuf_t rb)
+ * 
  * Scope: PRIVATE (static)
  *
  * Description
@@ -64,8 +64,8 @@ cmyth_ringbuf_destroy(cmyth_ringbuf_t rb)
 }
 
 /*
- * cmyth_ringbuf_create()
- *
+ * cmyth_ringbuf_create(void)
+ * 
  * Scope: PUBLIC
  *
  * Description
@@ -101,8 +101,8 @@ cmyth_ringbuf_create(void)
 }
 
 /*
- * cmyth_ringbuf_setup()
- *
+ * cmyth_ringbuf_setup(cmyth_recorder_t old_rec)
+ * 
  * Scope: PUBLIC
  *
  * Description
@@ -148,7 +148,7 @@ cmyth_ringbuf_setup(cmyth_recorder_t rec)
 	pthread_mutex_lock(&rec->rec_conn->conn_mutex);
 
 	snprintf(msg, sizeof(msg),
-		 "QUERY_RECORDER %"PRIu32"[]:[]SETUP_RING_BUFFER[]:[]0",
+		 "QUERY_RECORDER %u[]:[]SETUP_RING_BUFFER[]:[]0",
 		 rec->rec_id);
 
 	if ((err=cmyth_send_message(control, msg)) < 0) {
@@ -164,7 +164,7 @@ cmyth_ringbuf_setup(cmyth_recorder_t rec)
 		r = cmyth_rcv_string(control, &err, buf, sizeof(buf)-1, count);
 		count -= r;
 	}
-	r = cmyth_rcv_string(control, &err, url, sizeof(url)-1, count);
+	r = cmyth_rcv_string(control, &err, url, sizeof(url)-1, count); 
 	count -= r;
 
 	if ((r=cmyth_rcv_int64(control, &err, &size, count)) < 0) {
@@ -184,7 +184,6 @@ cmyth_ringbuf_setup(cmyth_recorder_t rec)
 
 	cmyth_dbg(CMYTH_DBG_DEBUG, "%s: url is: '%s'\n",
 		  __FUNCTION__, url);
-	path = url;
 	if (strncmp(url, service, sizeof(service) - 1) == 0) {
 		/*
 		 * The URL starts with rbuf://.  The rest looks like
@@ -213,6 +212,10 @@ cmyth_ringbuf_setup(cmyth_recorder_t rec)
 				  __FUNCTION__);
 			goto out;
 		}
+	} else {
+		cmyth_dbg(CMYTH_DBG_DEBUG, "%s: unrecognized URL '%s'\n",
+			  __FUNCTION__, url);
+		goto out;
 	}
 
 	new_rec = cmyth_recorder_dup(rec);
@@ -223,7 +226,7 @@ cmyth_ringbuf_setup(cmyth_recorder_t rec)
 	}
 	ref_release(rec);
         new_rec->rec_ring = cmyth_ringbuf_create();
-
+        
 	tmp = *(port - 1);
 	*(port - 1) = '\0';
 	new_rec->rec_ring->ringbuf_hostname = ref_strdup(host);
@@ -249,31 +252,23 @@ cmyth_ringbuf_pathname(cmyth_recorder_t rec)
 }
 
 /*
- * cmyth_ringbuf_get_block()
- *
+ * cmyth_ringbuf_get_block(cmyth_recorder_t rec, char *buf, unsigned long len)
  * Scope: PUBLIC
- *
  * Description
- *
  * Read incoming file data off the network into a buffer of length len.
  *
  * Return Value:
- *
- * Success: number of bytes read into buf
- *
+ * Sucess: number of bytes read into buf
  * Failure: -1
  */
-int32_t
-cmyth_ringbuf_get_block(cmyth_recorder_t rec, char *buf, int32_t len)
+int
+cmyth_ringbuf_get_block(cmyth_recorder_t rec, char *buf, unsigned long len)
 {
 	struct timeval tv;
 	fd_set fds;
 
 	if (rec == NULL)
 		return -EINVAL;
-
-	if(len > rec->rec_ring->conn_data->conn_tcp_rcvbuf)
-		len = rec->rec_ring->conn_data->conn_tcp_rcvbuf;
 
 	tv.tv_sec = 10;
 	tv.tv_usec = 0;
@@ -314,8 +309,8 @@ cmyth_ringbuf_select(cmyth_recorder_t rec, struct timeval *timeout)
 }
 
 /*
- * cmyth_ringbuf_request_block()
- *
+ * cmyth_ringbuf_request_block(cmyth_ringbuf_t file, unsigned long len)
+ * 
  * Scope: PUBLIC
  *
  * Description
@@ -329,13 +324,12 @@ cmyth_ringbuf_select(cmyth_recorder_t rec, struct timeval *timeout)
  *
  * Failure: an int containing -errno
  */
-int32_t
-cmyth_ringbuf_request_block(cmyth_recorder_t rec, int32_t len)
+int
+cmyth_ringbuf_request_block(cmyth_recorder_t rec, unsigned long len)
 {
 	int err, count;
 	int r;
-	int ret;
-	int32_t c;
+	long c, ret;
 	char msg[256];
 
 	if (!rec) {
@@ -346,11 +340,13 @@ cmyth_ringbuf_request_block(cmyth_recorder_t rec, int32_t len)
 
 	pthread_mutex_lock(&rec->rec_conn->conn_mutex);
 
-	if(len > rec->rec_ring->conn_data->conn_tcp_rcvbuf)
-		len = rec->rec_ring->conn_data->conn_tcp_rcvbuf;
+#ifdef LIBCMYTH_READ_SINGLE_THREAD
+	if(len > (unsigned int)rec->rec_conn->conn_tcp_rcvbuf)
+		len = (unsigned int)rec->rec_conn->conn_tcp_rcvbuf;
+#endif
 
 	snprintf(msg, sizeof(msg),
-		 "QUERY_RECORDER %"PRIu32"[]:[]REQUEST_BLOCK_RINGBUF[]:[]%"PRId32,
+		 "QUERY_RECORDER %u[]:[]REQUEST_BLOCK_RINGBUF[]:[]%ld",
 		 rec->rec_id, len);
 
 	if ((err = cmyth_send_message(rec->rec_conn, msg)) < 0) {
@@ -362,7 +358,7 @@ cmyth_ringbuf_request_block(cmyth_recorder_t rec, int32_t len)
 	}
 
 	count = cmyth_rcv_length(rec->rec_conn);
-	if ((r = cmyth_rcv_int32(rec->rec_conn, &err, &c, count)) < 0) {
+	if ((r=cmyth_rcv_long(rec->rec_conn, &err, &c, count)) < 0) {
 		cmyth_dbg(CMYTH_DBG_ERROR,
 			  "%s: cmyth_rcv_length() failed (%d)\n",
 			  __FUNCTION__, r);
@@ -380,8 +376,8 @@ cmyth_ringbuf_request_block(cmyth_recorder_t rec, int32_t len)
 }
 
 /*
- * cmyth_ringbuf_read ()
- *
+ * cmyth_ringbuf_read (cmyth_recorder_t rec, char *buf, unsigned long len)
+ * 
  * Scope: PUBLIC
  *
  * Description
@@ -394,7 +390,7 @@ cmyth_ringbuf_request_block(cmyth_recorder_t rec, int32_t len)
  *
  * Failure: an int containing -errno
  */
-int32_t cmyth_ringbuf_read(cmyth_recorder_t rec, char *buf, int32_t len)
+int cmyth_ringbuf_read(cmyth_recorder_t rec, char *buf, unsigned long len)
 {
 	int err, count;
 	int ret, req, nfds;
@@ -412,11 +408,8 @@ int32_t cmyth_ringbuf_read(cmyth_recorder_t rec, char *buf, int32_t len)
 
 	pthread_mutex_lock (&rec->rec_conn->conn_mutex);
 
-	if(len > rec->rec_ring->conn_data->conn_tcp_rcvbuf)
-		len = rec->rec_ring->conn_data->conn_tcp_rcvbuf;
-
 	snprintf(msg, sizeof(msg),
-		 "QUERY_RECORDER %"PRIu32"[]:[]REQUEST_BLOCK_RINGBUF[]:[]%"PRId32,
+		 "QUERY_RECORDER %u[]:[]REQUEST_BLOCK_RINGBUF[]:[]%ld",
 		 rec->rec_id, len);
 
 	if ( (err = cmyth_send_message (rec->rec_conn, msg) ) < 0)
@@ -476,7 +469,7 @@ int32_t cmyth_ringbuf_read(cmyth_recorder_t rec, char *buf, int32_t len)
 				goto out;
 			}
 
-			if ((ret = cmyth_rcv_int32 (rec->rec_conn, &err, &len, count))< 0)
+			if ((ret = cmyth_rcv_ulong (rec->rec_conn, &err, &len, count))< 0)
 			{
 				cmyth_dbg (CMYTH_DBG_ERROR,
 				           "%s: cmyth_rcv_long() failed (%d)\n",
@@ -494,7 +487,7 @@ int32_t cmyth_ringbuf_read(cmyth_recorder_t rec, char *buf, int32_t len)
 		if (FD_ISSET(rec->rec_ring->conn_data->conn_fd, &fds))
 		{
 
-			if ((ret = recv (rec->rec_ring->conn_data->conn_fd, cur, (int32_t)(end - cur), 0)) < 0)
+			if ((ret = recv (rec->rec_ring->conn_data->conn_fd, cur, end-cur, 0)) < 0)
 			{
 				cmyth_dbg (CMYTH_DBG_ERROR,
 				           "%s: recv() failed (%d)\n",
@@ -505,25 +498,26 @@ int32_t cmyth_ringbuf_read(cmyth_recorder_t rec, char *buf, int32_t len)
 		}
 	}
 
-	ret = (int32_t)(cur - buf);
+	ret = end - buf;
 out:
 	pthread_mutex_unlock (&rec->rec_conn->conn_mutex);
 	return ret;
 }
 
 /*
- * cmyth_ringbuf_seek()
- *
+ * cmyth_ringbuf_seek(
+ *                    cmyth_ringbuf_t file, long long offset, int whence)
+ * 
  * Scope: PUBLIC
  *
  * Description
  *
  * Seek to a new position in the file based on the value of whence:
- *	WHENCE_SET
+ *	SEEK_SET
  *		The offset is set to offset bytes.
- *	WHENCE_CUR
+ *	SEEK_CUR
  *		The offset is set to the current position plus offset bytes.
- *	WHENCE_END
+ *	SEEK_END
  *		The offset is set to the size of the file minus offset bytes.
  *
  * Return Value:
@@ -532,14 +526,16 @@ out:
  *
  * Failure: an int containing -errno
  */
-int64_t
+long long
 cmyth_ringbuf_seek(cmyth_recorder_t rec,
-		   int64_t offset, int8_t whence)
+		   long long offset, int whence)
 {
 	char msg[128];
 	int err;
-	int r, count;
-	int64_t c, ret;
+	int count;
+	int64_t c;
+	long r;
+	long long ret;
 	cmyth_ringbuf_t ring;
 
 	if (rec == NULL)
@@ -547,13 +543,13 @@ cmyth_ringbuf_seek(cmyth_recorder_t rec,
 
 	ring = rec->rec_ring;
 
-	if ((offset == 0) && (whence == WHENCE_CUR))
+	if ((offset == 0) && (whence == SEEK_CUR))
 		return ring->file_pos;
 
 	pthread_mutex_lock(&rec->rec_conn->conn_mutex);
 
 	snprintf(msg, sizeof(msg),
-		 "QUERY_RECORDER %"PRIu32"[]:[]SEEK_RINGBUF[]:[]%"PRId32"[]:[]%"PRId32"[]:[]%"PRId8"[]:[]%"PRId32"[]:[]%"PRId32,
+		 "QUERY_RECORDER %u[]:[]SEEK_RINGBUF[]:[]%d[]:[]%d[]:[]%d[]:[]%d[]:[]%d",
 		 rec->rec_id,
 		 (int32_t)(offset >> 32),
 		 (int32_t)(offset & 0xffffffff),
@@ -579,13 +575,13 @@ cmyth_ringbuf_seek(cmyth_recorder_t rec,
 	}
 
 	switch (whence) {
-	case WHENCE_SET:
+	case SEEK_SET:
 		ring->file_pos = offset;
 		break;
-	case WHENCE_CUR:
+	case SEEK_CUR:
 		ring->file_pos += offset;
 		break;
-	case WHENCE_END:
+	case SEEK_END:
 		ring->file_pos = ring->file_length - offset;
 		break;
 	}
@@ -594,6 +590,12 @@ cmyth_ringbuf_seek(cmyth_recorder_t rec,
 
     out:
 	pthread_mutex_unlock(&rec->rec_conn->conn_mutex);
-
+	
 	return ret;
+}
+
+cmyth_file_t
+cmyth_ringbuf_file(cmyth_recorder_t rec)
+{
+	return ref_hold(rec->rec_ring);
 }

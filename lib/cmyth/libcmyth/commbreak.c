@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2005-2012, Jon Gettler
+ *  Copyright (C) 2005-2013, Jon Gettler
  *  http://www.mvpmc.org/
  *
  *  This library is free software; you can redistribute it and/or
@@ -95,7 +95,7 @@ cmyth_commbreak_create(void)
 cmyth_commbreaklist_t
 cmyth_get_commbreaklist(cmyth_conn_t conn, cmyth_proginfo_t prog)
 {
-	unsigned int len = CMYTH_UTC_LEN + CMYTH_INT64_LEN + 19;
+	unsigned int len = CMYTH_UTC_LEN + CMYTH_LONGLONG_LEN + 19;
 	int err;
 	int count;
 	char *buf;
@@ -108,8 +108,8 @@ cmyth_get_commbreaklist(cmyth_conn_t conn, cmyth_proginfo_t prog)
 		return breaklist;
 	}
 
-	sprintf(buf,"%s %"PRIu32" %ld", "QUERY_COMMBREAK", prog->proginfo_chanId,
-	        (long)cmyth_timestamp_to_unixtime(prog->proginfo_rec_start_ts));
+	sprintf(buf,"%s %ld %i", "QUERY_COMMBREAK", prog->proginfo_chanId, 
+	        (int)cmyth_timestamp_to_unixtime(prog->proginfo_rec_start_ts));
 	pthread_mutex_lock(&conn->conn_mutex);
 	if ((err = cmyth_send_message(conn, buf)) < 0) {
 		cmyth_dbg(CMYTH_DBG_ERROR,
@@ -141,7 +141,7 @@ cmyth_get_commbreaklist(cmyth_conn_t conn, cmyth_proginfo_t prog)
 cmyth_commbreaklist_t
 cmyth_get_cutlist(cmyth_conn_t conn, cmyth_proginfo_t prog)
 {
-	unsigned int len = CMYTH_UTC_LEN + CMYTH_INT64_LEN + 17;
+	unsigned int len = CMYTH_UTC_LEN + CMYTH_LONGLONG_LEN + 17;
 	int err;
 	int count;
 	char *buf;
@@ -154,9 +154,11 @@ cmyth_get_cutlist(cmyth_conn_t conn, cmyth_proginfo_t prog)
 		return breaklist;
 	}
 
-	sprintf(buf,"%s %"PRIu32" %ld", "QUERY_CUTLIST", prog->proginfo_chanId,
-	        (long)cmyth_timestamp_to_unixtime(prog->proginfo_rec_start_ts));
 	pthread_mutex_lock(&conn->conn_mutex);
+
+	sprintf(buf,"%s %ld %i", "QUERY_CUTLIST", prog->proginfo_chanId, 
+	        (int)cmyth_timestamp_to_unixtime(prog->proginfo_rec_start_ts));
+
 	if ((err = cmyth_send_message(conn, buf)) < 0) {
 		cmyth_dbg(CMYTH_DBG_ERROR,
 			"%s: cmyth_send_message() failed (%d)\n",
@@ -184,19 +186,18 @@ cmyth_get_cutlist(cmyth_conn_t conn, cmyth_proginfo_t prog)
 	return breaklist;
 }
 
-int cmyth_rcv_commbreaklist(cmyth_conn_t conn, int *err,
+int cmyth_rcv_commbreaklist(cmyth_conn_t conn, int *err, 
 			cmyth_commbreaklist_t breaklist, int count)
 {
 	int consumed;
 	int total = 0;
-	int rows;
+	long rows;
 	int64_t mark;
-	int64_t start_mark;
+	long long start = -1;
 	char *failed = NULL;
 	cmyth_commbreak_t commbreak;
-	uint8_t type;
-	uint8_t start_type;
-	int started = 0;
+	unsigned short type;
+	unsigned short start_type;
 	int i;
 
 	if (count <= 0) {
@@ -207,7 +208,7 @@ int cmyth_rcv_commbreaklist(cmyth_conn_t conn, int *err,
 	/*
 	 * Get number of rows
 	 */
-	consumed = cmyth_rcv_int32(conn, err, &rows, count);
+	consumed = cmyth_rcv_long(conn, err, &rows, count);
 	count -= consumed;
 	total += consumed;
 	if (*err) {
@@ -222,7 +223,7 @@ int cmyth_rcv_commbreaklist(cmyth_conn_t conn, int *err,
 	}
 
 	for (i = 0; i < rows; i++) {
-		consumed = cmyth_rcv_uint8(conn, err, &type, count);
+		consumed = cmyth_rcv_ushort(conn, err, &type, count);
 		count -= consumed;
 		total += consumed;
 		if (*err) {
@@ -234,29 +235,28 @@ int cmyth_rcv_commbreaklist(cmyth_conn_t conn, int *err,
 		count -= consumed;
 		total += consumed;
 		if (*err) {
-			failed = "cmyth_rcv_long_long";
+			failed = "cmyth_rcv_long long";
 			goto fail;
 		}
 		if (type == CMYTH_COMMBREAK_START || type == CMYTH_CUTLIST_START) {
-			start_mark = mark;
+			start = mark;
 			start_type = type;
-			started = 1;
 		} else if (type == CMYTH_COMMBREAK_END || type == CMYTH_CUTLIST_END) {
-			if (started &&
+			if (start >= 0 &&
 			    ((type == CMYTH_COMMBREAK_END && start_type == CMYTH_COMMBREAK_START)
 			     || (type == CMYTH_CUTLIST_END && start_type == CMYTH_CUTLIST_START)))
 			{
 				commbreak = cmyth_commbreak_create();
-				commbreak->start_mark = start_mark;
+				commbreak->start_mark = start;
 				commbreak->end_mark = mark;
-				started = 0;
+				start = -1;
 				breaklist->commbreak_list = realloc(breaklist->commbreak_list,
 					(++breaklist->commbreak_count) * sizeof(cmyth_commbreak_t));
 				breaklist->commbreak_list[breaklist->commbreak_count - 1] = commbreak;
 			} else {
 				cmyth_dbg(CMYTH_DBG_WARN,
-					"%s: ignoring 'end' marker without a 'start' marker at %"PRId64"\n",
-					__FUNCTION__, mark);
+					"%s: ignoring 'end' marker without a 'start' marker at %lld\n",
+					__FUNCTION__, type, mark);
 			}
 		} else {
 				cmyth_dbg(CMYTH_DBG_WARN,
@@ -279,14 +279,15 @@ int cmyth_rcv_commbreaklist(cmyth_conn_t conn, int *err,
 	return total;
 }
 
+#if defined(HAS_MYSQL)
 cmyth_commbreaklist_t
 cmyth_mysql_get_commbreaklist(cmyth_database_t db, cmyth_conn_t conn, cmyth_proginfo_t prog)
 {
 	cmyth_commbreaklist_t breaklist = cmyth_commbreaklist_create();
-	time_t start_ts_dt;
+	char start_ts_dt[CMYTH_TIMESTAMP_LEN + 1];
 	int r;
 
-	start_ts_dt = cmyth_timestamp_to_unixtime(prog->proginfo_rec_start_ts);
+	cmyth_timestamp_to_display_string(start_ts_dt, prog->proginfo_rec_start_ts, 0);
 	pthread_mutex_lock(&conn->conn_mutex);
 	if ((r=cmyth_mysql_get_commbreak_list(db, prog->proginfo_chanId, start_ts_dt, breaklist, conn->conn_version)) < 0) {
 		cmyth_dbg(CMYTH_DBG_ERROR,
@@ -295,13 +296,76 @@ cmyth_mysql_get_commbreaklist(cmyth_database_t db, cmyth_conn_t conn, cmyth_prog
 		goto out;
 	}
 
-	fprintf(stderr, "Found %d commercial breaks for current program.\n", breaklist->commbreak_count);
+	fprintf(stderr, "Found %li commercial breaks for current program.\n", breaklist->commbreak_count);
 	if (r != breaklist->commbreak_count) {
 		fprintf(stderr, "commbreak error.  Setting number of commercial breaks to zero\n");
-		cmyth_dbg(CMYTH_DBG_ERROR, "%s  - returned rows=%d commbreak_count=%d\n",__FUNCTION__, r,breaklist->commbreak_count);
+		cmyth_dbg(CMYTH_DBG_ERROR, "%s  - returned rows=%d commbreak_count=%li\n",__FUNCTION__, r,breaklist->commbreak_count);
 		breaklist->commbreak_count = 0;
 	}
 	out:
 	pthread_mutex_unlock(&conn->conn_mutex);
 	return breaklist;
+}
+#endif /* HAS_MYSQL */
+
+long long
+cmyth_commbreak_start_mark(cmyth_commbreak_t cb)
+{
+	if (cb == NULL) {
+		return -1;
+	}
+
+	return cb->start_mark;
+}
+
+long long
+cmyth_commbreak_end_mark(cmyth_commbreak_t cb)
+{
+	if (cb == NULL) {
+		return -1;
+	}
+
+	return cb->end_mark;
+}
+
+long long
+cmyth_commbreak_start_offset(cmyth_commbreak_t cb)
+{
+	if (cb == NULL) {
+		return -1;
+	}
+
+	return cb->start_offset;
+}
+
+long long
+cmyth_commbreak_end_offset(cmyth_commbreak_t cb)
+{
+	if (cb == NULL) {
+		return -1;
+	}
+
+	return cb->end_offset;
+}
+
+int
+cmyth_commbreak_get_count(cmyth_commbreaklist_t cbl)
+{
+	if (cbl == NULL) {
+		return -1;
+	}
+
+	return (int)cbl->commbreak_count;
+}
+
+cmyth_commbreak_t
+cmyth_commbreak_get_item(cmyth_commbreaklist_t cbl, unsigned int index)
+{
+	int i = (int)index;
+
+	if ((cbl == NULL) || (i < 0) || (i >= cbl->commbreak_count)) {
+		return NULL;
+	}
+
+	return (cmyth_commbreak_t)ref_hold(cbl->commbreak_list[index]);
 }

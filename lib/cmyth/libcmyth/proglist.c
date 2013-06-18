@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2004-2010, Eric Lund
+ *  Copyright (C) 2004-2013, Eric Lund
  *  http://www.mvpmc.org/
  *
  *  This library is free software; you can redistribute it and/or
@@ -30,8 +30,8 @@
 #include <cmyth_local.h>
 
 /*
- * cmyth_proglist_destroy()
- *
+ * cmyth_proglist_destroy(void)
+ * 
  * Scope: PRIVATE (static)
  *
  * Description
@@ -48,11 +48,12 @@ static void
 cmyth_proglist_destroy(cmyth_proglist_t pl)
 {
 	int i;
-
+	ref_get_refcount("Before cmyth_proglist_destroy");
 	cmyth_dbg(CMYTH_DBG_DEBUG, "%s\n", __FUNCTION__);
 	if (!pl) {
 		return;
 	}
+
 	for (i  = 0; i < pl->proglist_count; ++i) {
 		if (pl->proglist_list[i]) {
 			ref_release(pl->proglist_list[i]);
@@ -63,11 +64,12 @@ cmyth_proglist_destroy(cmyth_proglist_t pl)
 		free(pl->proglist_list);
 	}
 	pthread_mutex_destroy(&pl->proglist_mutex);
+	ref_get_refcount("After cmyth_proglist_destroy");
 }
 
 /*
- * cmyth_proglist_create()
- *
+ * cmyth_proglist_create(void)
+ * 
  * Scope: PUBLIC
  *
  * Description
@@ -86,6 +88,7 @@ cmyth_proglist_create(void)
 	cmyth_proglist_t ret;
 
 	cmyth_dbg(CMYTH_DBG_DEBUG, "%s\n", __FUNCTION__);
+	ref_get_refcount("Before cmyth_proglist_create:");
 	ret = ref_alloc(sizeof(*ret));
 	if (!ret) {
 		return(NULL);
@@ -95,11 +98,13 @@ cmyth_proglist_create(void)
 	ret->proglist_list = NULL;
 	ret->proglist_count = 0;
 	pthread_mutex_init(&ret->proglist_mutex, NULL);
+	ref_get_refcount("After cmyth_proglist_create:");
+
 	return ret;
 }
 
 /*
- * cmyth_proglist_get_item()
+ * cmyth_proglist_get_item(cmyth_proglist_t pl, int index)
  *
  * Scope: PUBLIC
  *
@@ -178,7 +183,7 @@ cmyth_proglist_delete_item(cmyth_proglist_t pl, cmyth_proginfo_t prog)
 }
 
 /*
- * cmyth_proglist_get_count()
+ * cmyth_proglist_get_count(cmyth_proglist_t pl)
  *
  * Scope: PUBLIC
  *
@@ -205,8 +210,10 @@ cmyth_proglist_get_count(cmyth_proglist_t pl)
 }
 
 /*
- * cmyth_proglist_get_list()
- *
+ * cmyth_proglist_get_list(cmyth_conn_t conn,
+ *                         cmyth_proglist_t proglist,
+ *                         char *msg, char *func)
+ * 
  * Scope: PRIVATE (static)
  *
  * Description
@@ -257,9 +264,9 @@ cmyth_proglist_get_list(cmyth_conn_t conn,
 		goto out;
 	}
 	if (strcmp(msg, "QUERY_GETALLPENDING") == 0) {
-		int32_t c;
+		long c;
 		int r;
-		if ((r = cmyth_rcv_int32(conn, &err, &c, count)) < 0) {
+		if ((r=cmyth_rcv_long(conn, &err, &c, count)) < 0) {
 			cmyth_dbg(CMYTH_DBG_ERROR,
 				  "%s: cmyth_rcv_length() failed (%d)\n",
 				  __FUNCTION__, r);
@@ -290,8 +297,9 @@ cmyth_proglist_get_list(cmyth_conn_t conn,
 }
 
 /*
- * cmyth_proglist_get_all_recorded()
- *
+ * cmyth_proglist_get_all_recorded(cmyth_conn_t control,
+ *                                 cmyth_proglist_t *proglist)
+ * 
  * Scope: PUBLIC
  *
  * Description
@@ -313,6 +321,7 @@ cmyth_proglist_get_all_recorded(cmyth_conn_t control)
 	char query[32];
 	cmyth_proglist_t proglist = cmyth_proglist_create();
 
+	ref_get_refcount("Before cmyth_proglist_get_all_recorded:");
 	if (proglist == NULL) {
 		cmyth_dbg(CMYTH_DBG_ERROR,
 			  "%s: cmyth_proglist_create() failed\n",
@@ -335,12 +344,14 @@ cmyth_proglist_get_all_recorded(cmyth_conn_t control)
 		ref_release(proglist);
 		return NULL;
 	}
+	ref_get_refcount("After cmyth_proglist_get_all_recorded:");
 	return proglist;
 }
 
 /*
- * cmyth_proglist_get_all_pending()
- *
+ * cmyth_proglist_get_all_pending(cmyth_conn_t control,
+ *                                cmyth_proglist_t *proglist)
+ * 
  * Scope: PUBLIC
  *
  * Description
@@ -360,7 +371,7 @@ cmyth_proglist_t
 cmyth_proglist_get_all_pending(cmyth_conn_t control)
 {
 	cmyth_proglist_t proglist = cmyth_proglist_create();
-
+        ref_get_refcount("Before cmyth_get_all_pending:");
 	if (proglist == NULL) {
 		cmyth_dbg(CMYTH_DBG_ERROR,
 			  "%s: cmyth_proglist_create() failed\n",
@@ -377,12 +388,14 @@ cmyth_proglist_get_all_pending(cmyth_conn_t control)
 		ref_release(proglist);
 		return NULL;
 	}
+        ref_get_refcount("Before cmyth_get_all_pending:");
 	return proglist;
 }
 
 /*
- * cmyth_proglist_get_all_scheduled()
- *
+ * cmyth_proglist_get_all_scheduled(cmyth_conn_t control,
+ *                                  cmyth_proglist_t *proglist)
+ * 
  * Scope: PUBLIC
  *
  * Description
@@ -423,8 +436,9 @@ cmyth_proglist_get_all_scheduled(cmyth_conn_t control)
 }
 
 /*
- * cmyth_proglist_get_conflicting()
- *
+ * cmyth_proglist_get_conflicting(cmyth_conn_t control,
+ *                                cmyth_proglist_t *proglist)
+ * 
  * Scope: PUBLIC
  *
  * Description
@@ -465,7 +479,7 @@ cmyth_proglist_get_conflicting(cmyth_conn_t control)
 }
 
 /*
- * sort_timestamp()
+ * sort_timestamp(const void *a, const void *b)
  *
  * Scope: PRIVATE
  *
@@ -473,7 +487,7 @@ cmyth_proglist_get_conflicting(cmyth_conn_t control)
  *
  * Return an integer value to specify the relative position of the timestamp
  * This is a helper function for the sort function called by qsort.  It will
- * sort any of the timetstamps for the qsort functions
+ * sort any of the timetstamps for the qsort functions 
  *
  * Return Value:
  *
@@ -501,7 +515,7 @@ static int sort_timestamp(cmyth_timestamp_t X, cmyth_timestamp_t Y)
 				return 1;
 			else if (X->timestamp_day < Y->timestamp_day)
 				return -1;
-			else /* X->timestamp_day == Y->timestamp_day */
+			else /* X->timestamp_day == Y->timestamp_day */ 
 			{
 				if (X->timestamp_hour > Y->timestamp_hour)
 					return 1;
@@ -529,17 +543,17 @@ static int sort_timestamp(cmyth_timestamp_t X, cmyth_timestamp_t Y)
 }
 
 /*
- * recorded_compare()
+ * recorded_compare(const void *a, const void *b)
  *
  * Scope: PRIVATE
  *
  * Description
  *
  * Return an integer value to a qsort function to specify the relative
- * position of the recorded date
+ * position of the recorded date 
  *
  * Return Value:
- *
+ * 
  * Same Day: 0
  * Date a > b: 1
  * Date a < b: -1
@@ -557,7 +571,7 @@ recorded_compare(const void *a, const void *b)
 }
 
 /*
- * airdate_compare()
+ * airdate_compare(const void *a, const void *b)
  *
  * Scope: PRIVATE
  *
@@ -567,7 +581,7 @@ recorded_compare(const void *a, const void *b)
  * position of the original airdate
  *
  * Return Value:
- *
+ * 
  * Same Day: 0
  * Date a > b: 1
  * Date a < b: -1
@@ -580,26 +594,37 @@ airdate_compare(const void *a, const void *b)
 	const cmyth_proginfo_t y = *(cmyth_proginfo_t *)b;
 	const cmyth_timestamp_t X = x->proginfo_originalairdate;
 	const cmyth_timestamp_t Y = y->proginfo_originalairdate;
+	int rc;
 
-	return sort_timestamp(X, Y);
+	rc = sort_timestamp(X, Y);
+	/* Fixup case were original airdate is set for a generic episode, without
+	   this code generic episode's sort order appears to be random - RAH */
+	if (rc == 0) {
+        	cmyth_timestamp_t X = x->proginfo_rec_start_ts;
+        	cmyth_timestamp_t Y = y->proginfo_rec_start_ts;
+		rc = sort_timestamp(X, Y);
+	}
+
+	return rc;
+ 
 }
 
 /*
- * cmyth_proglist_sort()
+ * cmyth_proglist_sort(cmyth_proglist_t pl, int count, int sort)
  *
  * Scope: PUBLIC
  *
  * Description
  *
- * Sort the epispde list by mythtv_sort setting. Check to ensure that the
+ * Sort the epispde list by mythtv_sort setting. Check to ensure that the 
  * program list is not null and pass the proglist_list to the qsort function
  *
  * Return Value:
- *
+ * 
  * Success = 0
  * Failure = -1
- */
-int
+ */ 
+int 
 cmyth_proglist_sort(cmyth_proglist_t pl, int count, cmyth_proglist_sort_t sort)
 {
         if (!pl) {
@@ -623,7 +648,7 @@ cmyth_proglist_sort(cmyth_proglist_t pl, int count, cmyth_proglist_sort_t sort)
 		case MYTHTV_SORT_ORIGINAL_AIRDATE: /*Default Date Recorded */
 			qsort((cmyth_proginfo_t)pl->proglist_list, count, sizeof(pl->proglist_list) , airdate_compare);
 			break;
-		default:
+		default: 
 			printf("Unsupported MythTV sort type\n");
 	}
 

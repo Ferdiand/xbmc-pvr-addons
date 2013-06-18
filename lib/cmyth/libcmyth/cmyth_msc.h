@@ -31,17 +31,20 @@
 
 #include <malloc.h>
 #include <winsock2.h>
-#include <Ws2tcpip.h>
 
 #pragma warning(disable:4267)
 #pragma warning(disable:4996)
 
-#define pthread_mutex_init(a, b) InitializeCriticalSection(a)
-#define pthread_mutex_destroy(a) DeleteCriticalSection(a)
-#define pthread_mutex_lock(a) EnterCriticalSection(a)
-#define pthread_mutex_unlock(a) LeaveCriticalSection(a)
-typedef CRITICAL_SECTION pthread_mutex_t;
+#define pthread_mutex_lock(a)
+#define pthread_mutex_unlock(a)
+#define PTHREAD_MUTEX_INITIALIZER NULL;
+typedef void *pthread_mutex_t;
 
+#undef ECANCELED
+#undef ETIMEDOUT
+
+#define ECANCELED -1
+#define ETIMEDOUT -1
 #define SHUT_RDWR SD_BOTH
 
 typedef SOCKET cmyth_socket_t;

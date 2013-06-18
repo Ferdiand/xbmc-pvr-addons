@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2005-2009, Jon Gettler
+ *  Copyright (C) 2005-2013, Jon Gettler
  *  http://www.mvpmc.org/
  *
  *  This library is free software; you can redistribute it and/or
@@ -25,13 +25,14 @@
 #include <cmyth_local.h>
 
 
-int64_t cmyth_get_bookmark(cmyth_conn_t conn, cmyth_proginfo_t prog)
+long long cmyth_get_bookmark(cmyth_conn_t conn, cmyth_proginfo_t prog)
 {
 	char *buf;
-	unsigned int len = CMYTH_TIMESTAMP_LEN + CMYTH_INT64_LEN + 18;
+	unsigned int len = CMYTH_TIMESTAMP_LEN + CMYTH_LONGLONG_LEN + 18;
 	int err;
-	int64_t ret;
+	long long ret;
 	int count;
+	int64_t ll;
 	int r;
 	char start_ts_dt[CMYTH_TIMESTAMP_LEN + 1];
 	cmyth_datetime_to_string(start_ts_dt, prog->proginfo_rec_start_ts);
@@ -39,9 +40,9 @@ int64_t cmyth_get_bookmark(cmyth_conn_t conn, cmyth_proginfo_t prog)
 	if (!buf) {
 		return -ENOMEM;
 	}
-	sprintf(buf,"%s %"PRIu32" %s","QUERY_BOOKMARK",prog->proginfo_chanId,
+	sprintf(buf,"%s %ld %s","QUERY_BOOKMARK",prog->proginfo_chanId,
 		start_ts_dt);
-	pthread_mutex_lock(&conn->conn_mutex);;
+	pthread_mutex_lock(&conn->conn_mutex);
 	if ((err = cmyth_send_message(conn,buf)) < 0) {
 		cmyth_dbg(CMYTH_DBG_ERROR,
 			"%s: cmyth_send_message() failed (%d)\n",
@@ -57,7 +58,7 @@ int64_t cmyth_get_bookmark(cmyth_conn_t conn, cmyth_proginfo_t prog)
 		ret = count;
 		goto out;
 	}
-	if ((r=cmyth_rcv_int64(conn, &err, &ret, count)) < 0) {
+	if ((r=cmyth_rcv_int64(conn, &err, &ll, count)) < 0) {
 		cmyth_dbg(CMYTH_DBG_ERROR,
 			"%s: cmyth_rcv_int64() failed (%d)\n",
 			__FUNCTION__, r);
@@ -65,16 +66,20 @@ int64_t cmyth_get_bookmark(cmyth_conn_t conn, cmyth_proginfo_t prog)
 		goto out;
 	}
 
+	ret = ll;
    out:
 	pthread_mutex_unlock(&conn->conn_mutex);
 	return ret;
 }
-
-int cmyth_set_bookmark(cmyth_conn_t conn, cmyth_proginfo_t prog, int64_t bookmark)
+	
+int cmyth_set_bookmark(cmyth_conn_t conn, cmyth_proginfo_t prog, long long bookmark)
 {
 	char *buf;
-	unsigned int len = CMYTH_TIMESTAMP_LEN + CMYTH_INT64_LEN * 2 + 18 + 2;
+	unsigned int len = CMYTH_TIMESTAMP_LEN + CMYTH_LONGLONG_LEN * 2 + 18;
+	char resultstr[3];
+	int r,err;
 	int ret;
+	int count;
 	char start_ts_dt[CMYTH_TIMESTAMP_LEN + 1];
 	cmyth_datetime_to_string(start_ts_dt, prog->proginfo_rec_start_ts);
 	buf = alloca(len);
@@ -84,26 +89,38 @@ int cmyth_set_bookmark(cmyth_conn_t conn, cmyth_proginfo_t prog, int64_t bookmar
 	if (conn->conn_version >= 66) {
 		/*
 		 * Since protocol 66 mythbackend expects a single 64 bit integer rather than two 32 bit
-		 * hi and lo integers. Nevertheless the backend (at least up to 0.25) checks
-		 * the existence of the 4th parameter, so adding a 0.
+		 * hi and lo integers.
 		 */
-		sprintf(buf, "SET_BOOKMARK %"PRIu32" %s %"PRId64" 0", prog->proginfo_chanId,
-				start_ts_dt, bookmark);
+		sprintf(buf, "SET_BOOKMARK %ld %s %"PRIu64, prog->proginfo_chanId,
+				start_ts_dt, (int64_t)bookmark);
 	}
 	else {
-		sprintf(buf, "SET_BOOKMARK %"PRIu32" %s %"PRId32" %"PRId32, prog->proginfo_chanId,
+		sprintf(buf, "SET_BOOKMARK %ld %s %d %d", prog->proginfo_chanId,
 				start_ts_dt, (int32_t)(bookmark >> 32), (int32_t)(bookmark & 0xffffffff));
 	}
-	pthread_mutex_lock(&conn->conn_mutex);;
-	if ((ret = cmyth_send_message(conn,buf)) < 0) {
+	pthread_mutex_lock(&conn->conn_mutex);
+	if ((err = cmyth_send_message(conn,buf)) < 0) {
 		cmyth_dbg(CMYTH_DBG_ERROR,
 			"%s: cmyth_send_message() failed (%d)\n",
-			__FUNCTION__, ret);
+			__FUNCTION__, err);
+		ret = err;
 		goto out;
 	}
-	if ((ret = cmyth_rcv_okay(conn)) < 0) {
-		cmyth_dbg(CMYTH_DBG_ERROR, "%s: cmyth_rcv_okay() failed\n",
-			  __FUNCTION__);
+	count = cmyth_rcv_length(conn);
+	if ((r=cmyth_rcv_string(conn,&err,resultstr,sizeof(resultstr),count)) < 0) {
+		cmyth_dbg(CMYTH_DBG_ERROR,
+			"%s: cmyth_rcv_string() failed (%d)\n",
+			__FUNCTION__, err);
+		ret = r;
+		goto out;
+	}
+	count -= r;
+	if (count == 0) {
+		ret = (strncmp(resultstr,"OK",2) == 0);
+	} else {
+		ret = -1;
+		cmyth_dbg(CMYTH_DBG_ERROR, "%s(): %d extra bytes\n",
+			  __FUNCTION__, count);
 	}
    out:
 	pthread_mutex_unlock(&conn->conn_mutex);

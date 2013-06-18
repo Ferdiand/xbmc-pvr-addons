@@ -24,8 +24,8 @@
 #include <cmyth_local.h>
 
 /*
- * cmyth_freespace_create()
- *
+ * cmyth_freespace_create(void)
+ * 
  * Scope: PUBLIC
  *
  * Description

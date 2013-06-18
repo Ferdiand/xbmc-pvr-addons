@@ -65,8 +65,8 @@
 #pragma GCC optimization_level 0
 #endif
 
-static mvp_atomic_t total_refcount = 0;
-static mvp_atomic_t total_bytecount = 0;
+static mvp_atomic_t total_refcount=0;
+static mvp_atomic_t total_bytecount=0;
 /*
  * struct refcounter
  *
@@ -138,6 +138,12 @@ int ref_get_refcount(char *loc)
 		   "%40.40s Refs: %7d   Bytes: %8d\n",
 		   loc,total_refcount,total_bytecount);
 	return(total_refcount);
+}
+
+void ref_get_usage(unsigned int *refs, unsigned int *bytes)
+{
+	*refs = total_refcount;
+	*bytes = total_bytecount;
 }
 
 #if defined(DEBUG)
